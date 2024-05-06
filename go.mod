@@ -1,6 +1,6 @@
 module immersivetranslate-kimi
 
-go 1.22
+go 1.22.2
 
 require (
 	github.com/go-playground/validator/v10 v10.20.0
