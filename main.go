@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/log"
 	"github.com/northes/go-moonshot"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -19,9 +19,9 @@ var (
 )
 
 func main() {
-	port, ok := os.LookupEnv("PORT")
-	if !ok {
-		port = "3000"
+	if err := loadConfig(); err != nil {
+		log.Fatalf("failed to load config: %v", err)
+		return
 	}
 
 	app := fiber.New(fiber.Config{
@@ -41,9 +41,10 @@ func main() {
 			return c.JSON(resp)
 		},
 	})
+
 	app.Post("/", HandleTranslation)
 
-	log.Fatal(app.Listen(fmt.Sprintf(":%s", port)))
+	log.Fatal(app.Listen(fmt.Sprintf(":%s", viper.GetString(ConfigPath.Port))))
 }
 
 type Request struct {
@@ -61,12 +62,26 @@ type Translation struct {
 	Text               string `json:"text"`
 }
 
-func HandleTranslation(c fiber.Ctx) error {
-	key := c.Query("key")
+func HandleTranslation(c fiber.Ctx) (err error) {
+	// 使用配置文件或环境变量初始化(一次)
 	if moonshotClient == nil {
+		key := viper.GetString(ConfigPath.Key)
 		moonshotClientOnce.Do(func() {
-			moonshotClient, _ = moonshot.NewClient(key)
+			moonshotClient, err = moonshot.NewClient(key)
 		})
+		if err != nil {
+			moonshotClientOnce = sync.Once{}
+			return err
+		}
+	}
+
+	// 使用Query初始化(每次)
+	key := c.Query("key")
+	if len(key) != 0 {
+		moonshotClient, err = moonshot.NewClient(key)
+		if err != nil {
+			return err
+		}
 	}
 
 	req := new(Request)
@@ -81,7 +96,7 @@ func HandleTranslation(c fiber.Ctx) error {
 		Messages: []*moonshot.ChatCompletionsMessage{
 			{
 				Role:    moonshot.RoleSystem,
-				Content: "你是一个专业的翻译员，你需要将用户输入的内容进行并输出。用户输入的是中文则翻译成英文，用户输入的是其他语言则翻译成中文。如果输入的是单词则翻译结果需要小写开头，如果输入的是句子则翻译结果需要注意大小写",
+				Content: viper.GetString(ConfigPath.Prompt),
 			},
 			{
 				Role:    moonshot.RoleUser,
