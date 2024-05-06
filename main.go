@@ -16,6 +16,7 @@ import (
 var (
 	moonshotClient     *moonshot.Client
 	moonshotClientOnce sync.Once
+	lastKey            string
 )
 
 func main() {
@@ -77,11 +78,13 @@ func HandleTranslation(c fiber.Ctx) (err error) {
 
 	// 使用Query初始化(每次)
 	key := c.Query("key")
-	if len(key) != 0 {
+	// 简单对比新旧key是否相同
+	if len(key) != 0 && key != lastKey {
 		moonshotClient, err = moonshot.NewClient(key)
 		if err != nil {
 			return err
 		}
+		lastKey = key
 	}
 
 	req := new(Request)
